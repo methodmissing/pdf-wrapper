@@ -134,7 +134,7 @@ module PDF
       load_libpixbuf
       x, y = current_point
       pixbuf = Gdk::Pixbuf.new(filename)
-      pixbuf = pixbuf.rotate( rotation_constant( opts[:rotate] ) )
+      pixbuf, opts = rotate( pixbuf, opts ) unless opts[:rotate] == :none
       width, height = calc_image_dimensions(opts[:width], opts[:height], pixbuf.width, pixbuf.height, opts[:proportional])
       x, y = calc_image_coords(opts[:left] || x, opts[:top] || y, opts[:width] || pixbuf.width, opts[:height] || pixbuf.height, width, height,  opts[:center])
       @context.save do
@@ -146,6 +146,16 @@ module PDF
       move_to(opts[:left] || x, (opts[:top] || y) + height)
     rescue Gdk::PixbufError
       raise ArgumentError, "Unrecognised image format (#{filename})"
+    end
+
+    def rotate( pixbuf, opts )
+      pixbuf.rotate( rotation_constant( opts[:rotate] ) )
+      opts[:width], opts[:height] = opts[:height], opts[:width] if adjust_dimensions_for_rotation?( opts[:rotate] )
+      [pixbuf, opts]
+    end
+    
+    def adjust_dimensions_for_rotation?( rotation )
+      [:counterclockwise, :clockwise].include?( rotation )
     end
 
     def rotation_constant( rotation )
