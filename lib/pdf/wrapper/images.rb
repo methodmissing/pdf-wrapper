@@ -153,9 +153,8 @@ module PDF
         @context.paint
       end
       move_to(opts[:left] || x, (opts[:top] || y) + height)
-    rescue Gdk::PixbufError => e
-      raise e.class, e.message
-      #raise ArgumentError, "Unrecognised image format (#{filename})"
+    rescue Gdk::PixbufError
+      raise ArgumentError, "Unrecognised image format (#{filename})"
     end
 
     def rotation_constant( rotation )
