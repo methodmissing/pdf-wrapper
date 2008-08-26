@@ -1,3 +1,20 @@
+v0.1.5 (Unreleased)
+- Fix text wrapping that crosses page boundaries
+  - when a new page is started as a result of a text() call, the text
+    should continue at the top of the next page, not the y value the
+    text started at
+
+v0.1.4 (Unreleased)
+- Wrapper#font_size now accepts a block for temporary font size changes
+- Allow the page size to be changed when starting a new page
+- Added support for manually setting table column widths
+  - prevents the column widths from growing or shrinking automatically
+- Deprecated Table#table_options in favour of passing options to Table#new
+  - Thanks to Zubin Henner for the suggestion
+- Deprecated Table#header_options and Table#headers= in favour of a new method
+  that can be used to specify both the content and options of the header row.
+  - Thanks to Zubin Henner for the suggestion
+
 v0.1.3 (24th July 2008)
 - Require the gem version of cairo
   - >= 1.5. However I recommend >= 1.6.3 to avoid FATAL error under 1.8.7

@@ -108,19 +108,8 @@ module PDF
 
       # test for invalid options
       options.assert_valid_keys(:paper, :orientation, :background_color, :margin_left, :margin_right, :margin_top, :margin_bottom, :template)
-      options[:paper] = options[:paper].to_sym
-      raise ArgumentError, "Invalid paper option" unless PAGE_SIZES.include?(options[:paper])
 
-      # set page dimensions
-      if options[:orientation].eql?(:portrait)
-        @page_width = PAGE_SIZES[options[:paper]][0]
-        @page_height = PAGE_SIZES[options[:paper]][1]
-      elsif options[:orientation].eql?(:landscape)
-        @page_width = PAGE_SIZES[options[:paper]][1]
-        @page_height = PAGE_SIZES[options[:paper]][0]
-      else
-        raise ArgumentError, "Invalid orientation"
-      end
+      set_dimensions(options[:orientation], options[:paper])
 
       # set page margins and dimensions of usable canvas
       @margin_left = options[:margin_left] || (@page_width * 0.05).ceil
@@ -231,6 +220,14 @@ module PDF
       @context.current_point
     end
 
+    def x
+      @context.current_point.first
+    end
+
+    def y
+      @context.current_point.last
+    end
+
     def margin_bottom
       device_y_to_user_y(@margin_bottom).to_i
     end
@@ -312,7 +309,7 @@ module PDF
     end
 
     def render_to_file(filename) #nodoc
-      # TODO: remove this at some point
+      # TODO: remove this at some point. Deprecation started on 24th July 2008
       warn "WARNING: render_to_file() is deprecated, please use render_file()"
       render_file filename
     end
@@ -408,16 +405,34 @@ module PDF
     #   end
     #   pdf.text "This is 100 points below the previous line of text"
     #
-    # If no block is provided, operates just like move_down. This behaviours is
-    # deprecated and may be changed one day.
     def pad(n)
       if block_given?
         move_down n
         yield
         move_down n
       else
-        # TODO: print a deprecation warning here?
         move_down n
+      end
+    end
+
+    # Moves right across the document by n, executes a block, then moves back
+    # left by the same amount
+    #
+    #   pdf.text "some text"
+    #   pdf.indent(50) do
+    #     pdf.text "This starts 50 points right the previous line of text"
+    #   end
+    #   pdf.text "This starts in line with the first line of text"
+    #
+    # If no block is provided, operates just like move_right.
+    #
+    def indent(n)
+      if block_given?
+        move_right n
+        yield
+        move_left n
+      else
+        move_right n
       end
     end
 
@@ -470,11 +485,15 @@ module PDF
     # move to the next page
     #
     # options:
+    # <tt>:paper</tt>::   The paper size to use (default: same as the previous page)
+    # <tt>:orientation</tt>::   :portrait or :landscape (default: same as the previous page)
     # <tt>:pageno</tt>::    If specified, the current page number will be set to that. By default, the page number will just increment.
     # <tt>:template</tt>::  The path to an image file. If specified, the new page will use the specified image as a template. The page will be sized to match the template size
     #
     def start_new_page(opts = {})
-      opts.assert_valid_keys(:pageno, :template)
+      opts.assert_valid_keys(:paper, :orientation, :pageno, :template)
+
+      set_dimensions(opts[:orientation], opts[:paper])
 
       @context.show_page
 
@@ -503,6 +522,33 @@ module PDF
     end
 
     private
+
+    def set_dimensions(orientation, paper)
+      # use the defaults if none were provided
+      orientation ||= @orientation
+      paper       ||= @paper
+
+      # safety check
+      orientation = orientation.to_sym
+      paper = paper.to_sym
+
+      raise ArgumentError, "Unrecognised paper size (#{paper})" if PAGE_SIZES[paper].nil?
+
+      # set page dimensions
+      if orientation.eql?(:portrait)
+        @page_width = PAGE_SIZES[paper][0]
+        @page_height = PAGE_SIZES[paper][1]
+      elsif orientation.eql?(:landscape)
+        @page_width = PAGE_SIZES[paper][1]
+        @page_height = PAGE_SIZES[paper][0]
+      else
+        raise ArgumentError, "Invalid orientation"
+      end
+
+      # make the new values the defaults
+      @orientation = orientation
+      @paper = paper
+    end
 
     def finish
       # finalise the document

@@ -1,9 +1,36 @@
 module PDF
   class Wrapper
 
-    # change the default font size
+    # Change the default font size
+    #
+    # If no block is provided, the change is permanent. If a block
+    # is provided, the change will revert at the end of the block
+    #
+    # Permanant change:
+    #
+    #   pdf.font_size 10
+    #
+    # Temporary change:
+    #
+    #   pdf.font_size 20
+    #   pdf.text "This text is size 20"
+    #   pdf.font_size(10) do
+    #     pdf.text "This text is size 20"
+    #   end
+    #   pdf.text "This text is size 20"
+    #
     def font_size(size)
-      @default_font_size = size.to_i unless size.nil?
+      new_size = size.to_i
+      raise ArgumentError, 'font size must be > 0' if new_size <= 0
+
+      if block_given?
+        orig_size = @default_font_size
+        @default_font_size = new_size
+        yield
+        @default_font_size = orig_size
+      else
+        @default_font_size = new_size
+      end
     end
     alias font_size= font_size
 
@@ -65,7 +92,7 @@ module PDF
           color(options[:color]) if options[:color]
 
           # draw the context on our cairo layout
-          render_layout(layout, options[:padding], options[:padding], texth, :auto_new_page => false)
+          render_layout(layout, options[:padding], options[:padding], texth)
         end
 
       end
@@ -74,7 +101,7 @@ module PDF
     # Write text to the page
     #
     # By default the text will be rendered using all the space within the margins and using
-    # the default font styling set by default_font(), default_font_size, etc
+    # the default font styling set by font(), font_size, etc
     #
     # There is no way to place a bottom bound (or height) onto the text. Text will wrap as
     # necessary and take all the room it needs. For finer grained control of text boxes, see the
@@ -110,7 +137,7 @@ module PDF
     # The format is vaguely XML-like.
     #
     # Bold: "Some of this text is <b>bold</b>."
-    # Italics: "Some of this text is in <b>italics</b>."
+    # Italics: "Some of this text is in <i>italics</i>."
     # Strikethrough: "My name is <s>Bob</s>James."
     # Monospace Font: "Code:\n<tt>puts 1</tt>."
     #
@@ -118,6 +145,7 @@ module PDF
     #
     # Big and Bold: Some of this text is <span weight="bold" font_desc="20">bold</span>.
     # Stretched: Some of this text is <span stretch="extraexpanded">funny looking</span>.
+    #
     def text(str, opts={})
       # TODO: add converters from various markup languages to pango markup. (markdown, textile, etc)
       # TODO: add a wrap option so wrapping can be disabled
@@ -141,7 +169,7 @@ module PDF
       color(options[:color]) if options[:color]
 
       # draw the context on our cairo layout
-      y = render_layout(layout, options[:left], options[:top], points_to_bottom_margin(options[:top]), :auto_new_page => true)
+      y = render_layout(layout, options[:left], options[:top])
 
       move_to(options[:left], y)
     end
@@ -175,7 +203,7 @@ module PDF
     private
 
     # takes a string and a range of options and creates a pango layout for us. Pango
-    # does all the hard work of calculating text layout, wrapping, fonts, sizes, 
+    # does all the hard work of calculating text layout, wrapping, fonts, sizes,
     # direction and more. Thank $diety.
     #
     # The string should be encoded using utf-8. If you get unexpected characters in the 
@@ -287,13 +315,18 @@ module PDF
     # based on a function of the same name found in the text2.rb sample file
     # distributed with rcairo - it's still black magic to me and has a few edge
     # cases where it doesn't work too well. Needs to be improved.
-    def render_layout(layout, x, y, h, opts = {})
+    #
+    # If h is specified, lines of text will be rendered up to that height, and 
+    # the rest will be ignored. 
+    #
+    # If h is nil, lines will be rendered until the bottom margin is hit, then
+    # a new page will be started and lines will continue being rendered at the
+    # top of the new page.
+    def render_layout(layout, x, y, h = nil)
       # we can't use context.show_pango_layout, as that won't start
       # a new page if the layout hits the bottom margin. Instead,
       # we iterate over each line of text in the layout and add it to
       # the canvas, page breaking as necessary
-      options = {:auto_new_page => true }
-      options.merge!(opts)
 
       offset = 0
       baseline = 0
@@ -308,17 +341,15 @@ module PDF
         baseline = iter.baseline / Pango::SCALE
         linex = logical_rect.x / Pango::SCALE
 
-        if baseline - offset >= h
-          # our text is using the maximum amount of vertical space we want it to
-          if options[:auto_new_page]
-            # create a new page and we can continue adding text
-            offset = baseline
-            start_new_page
-          else
-            # the user doesn't want us to continue on the next page, so
-            # stop adding lines to the canvas
-            break
-          end
+        if h && baseline - offset >= h
+          # the user doesn't want us to continue on the next page, so
+          # stop adding lines to the canvas
+          break
+        elsif h.nil? && (y + baseline - offset + spacing) >= self.absolute_bottom_margin
+          # create a new page and we can continue adding text
+          offset = baseline
+          start_new_page
+          y = self.y
         end
 
         # move to the start of this line
