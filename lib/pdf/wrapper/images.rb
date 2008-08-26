@@ -15,6 +15,9 @@ module PDF
     # <tt>:center</tt>::    If the image is scaled, it will be centered horizontally and vertically
     # <tt>:rotate</tt>::    The desired rotation. One of :counterclockwise, :upsidedown, :clockwise.
     #                       Doesn't work with PNG, PDF or SVG files.
+    # <tt>:crop</tt>::    Crop the image to a desired dimension.Array of numeric x, y, width and height.Applied before rotation
+    #                       and dimension calculations.  
+    #                       Doesn't work with PNG, PDF or SVG files.
     #
     # left and top default to the current cursor location
     # width and height default to the size of the imported image
@@ -22,7 +25,7 @@ module PDF
     def image(filename, opts = {})
       # TODO: add some options for justification and padding
       raise ArgumentError, "file #{filename} not found" unless File.file?(filename)
-      opts.assert_valid_keys(default_positioning_options.keys + [:padding, :proportional, :center, :rotate])
+      opts.assert_valid_keys(default_positioning_options.keys + [:padding, :proportional, :center, :rotate, :only])
 
       if opts[:padding]
         opts[:left]   += opts[:padding].to_i if opts[:left]
@@ -134,6 +137,10 @@ module PDF
       load_libpixbuf
       x, y = current_point
       pixbuf = Gdk::Pixbuf.new(filename)
+      if opts[:only]
+        crop_from_x, crop_from_y, crop_width, crop_height = opts[:only]
+        pixbuf = Gdk::Pixbuf.new(pixbuf.dup, crop_from_x.to_i, crop_from_y.to_i, crop_width.to_i, crop_height.to_i)
+      end
       if opts[:rotate]
         pixbuf = pixbuf.rotate( rotation_constant( opts[:rotate] ) )
       end
@@ -146,8 +153,9 @@ module PDF
         @context.paint
       end
       move_to(opts[:left] || x, (opts[:top] || y) + height)
-    rescue Gdk::PixbufError
-      raise ArgumentError, "Unrecognised image format (#{filename})"
+    rescue Gdk::PixbufError => e
+      raise e.class, e.message
+      #raise ArgumentError, "Unrecognised image format (#{filename})"
     end
 
     def rotation_constant( rotation )
