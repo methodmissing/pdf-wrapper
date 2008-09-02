@@ -18,6 +18,7 @@ module PDF
     # <tt>:crop</tt>::    Crop the image to a desired dimension.Array of numeric x, y, width and height.Applied before rotation
     #                       and dimension calculations.  
     #                       Doesn't work with PNG, PDF or SVG files.
+    # <tt>:simulate</tt>::    Simulation mode.Returns the render dimensions in format [:x, :y, :width, :height]
     #
     # left and top default to the current cursor location
     # width and height default to the size of the imported image
@@ -25,7 +26,7 @@ module PDF
     def image(filename, opts = {})
       # TODO: add some options for justification and padding
       raise ArgumentError, "file #{filename} not found" unless File.file?(filename)
-      opts.assert_valid_keys(default_positioning_options.keys + [:padding, :proportional, :center, :rotate, :only])
+      opts.assert_valid_keys(default_positioning_options.keys + [:padding, :proportional, :center, :rotate, :only, :simulate])  
 
       if opts[:padding]
         opts[:left]   += opts[:padding].to_i if opts[:left]
@@ -124,12 +125,25 @@ module PDF
       w, h = page.size
       width, height = calc_image_dimensions(opts[:width], opts[:height], w, h, opts[:proportional])
       x, y = calc_image_coords(opts[:left] || x, opts[:top] || y, opts[:width] || w, opts[:height] || h, width, height,  opts[:center])
-      @context.save do
+      simulate( x, y, width, height, opts ) do
         @context.translate(x, y)
         @context.scale(width / w, height / h)
         @context.render_poppler_page(page)
       end
-      move_to(opts[:left] || x, (opts[:top] || y) + height)
+    end
+
+    def simulate( x, y, width, height, opts )
+      if opts[:simulate]
+        @context.save
+        result = [@context.current_point.first, @context.current_point.last, width, height]
+        @context.restore
+        result  
+      else
+        @context.save do
+          yield
+        end
+        move_to(opts[:left] || x, (opts[:top] || y) + height)
+      end
     end
 
     def draw_pixbuf(filename, opts = {})
@@ -146,13 +160,12 @@ module PDF
       end
       width, height = calc_image_dimensions(opts[:width], opts[:height], pixbuf.width, pixbuf.height, opts[:proportional])
       x, y = calc_image_coords(opts[:left] || x, opts[:top] || y, opts[:width] || pixbuf.width, opts[:height] || pixbuf.height, width, height,  opts[:center])
-      @context.save do
+      simulate( x, y, width, height, opts ) do
         @context.translate(x, y)
         @context.scale(width / pixbuf.width, height / pixbuf.height)
         @context.set_source_pixbuf(pixbuf, 0, 0)
         @context.paint
       end
-      move_to(opts[:left] || x, (opts[:top] || y) + height)
     rescue Gdk::PixbufError
       raise ArgumentError, "Unrecognised image format (#{filename})"
     end
@@ -167,13 +180,13 @@ module PDF
       img_surface = Cairo::ImageSurface.from_png(filename)
       width, height = calc_image_dimensions(opts[:width], opts[:height], img_surface.width, img_surface.height, opts[:proportional])
       x, y = calc_image_coords(opts[:left] || x, opts[:top] || y, opts[:width] || img_surface.width, opts[:height] || img_surface.height, width, height,  opts[:center])
-      @context.save do
+      simulate( x, y, width, height, opts ) do
         @context.translate(x, y)
         @context.scale(width / img_surface.width, height / img_surface.height)
         @context.set_source(img_surface, 0, 0)
         @context.paint
+        move_to(opts[:left] || x, (opts[:top] || y) + height)
       end
-      move_to(opts[:left] || x, (opts[:top] || y) + height)
     end
 
     def draw_svg(filename, opts = {})
@@ -183,13 +196,11 @@ module PDF
       handle = RSVG::Handle.new_from_file(filename)
       width, height = calc_image_dimensions(opts[:width], opts[:height], handle.width, handle.height, opts[:proportional])
       x, y = calc_image_coords(opts[:left] || x, opts[:top] || y, opts[:width] || handle.width, opts[:height] || handle.height, width, height,  opts[:center])
-      @context.save do
+      simulate( x, y, width, height, opts ) do
         @context.translate(x, y)
         @context.scale(width / handle.width, height / handle.height)
         @context.render_rsvg_handle(handle)
-        #@context.paint
       end
-      move_to(opts[:left] || x, (opts[:top] || y) + height)
     end
 
     def image_dimensions(filename)
