@@ -134,10 +134,7 @@ module PDF
 
     def simulate( x, y, width, height, opts )
       if opts[:simulate]
-        @context.save
-        result = [@context.current_point.first, @context.current_point.last, width, height]
-        @context.restore
-        result  
+        [self.x,self.y, width, height]    
       else
         @context.save do
           yield
